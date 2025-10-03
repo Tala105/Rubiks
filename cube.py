@@ -8,8 +8,8 @@ FRONT_COLORS, TOP_COLORS, SIDE_COLORS = colors
 
 class Cube:
     def __init__(self):
+        self._pieces: list[list[Piece]] = []
         self.make_solved_cube()
-        self.scramble()
     
     def __repr__(self):
         return f"\n{repr(self._pieces[0][0:3])}\n{repr(self._pieces[0][3:6])}\n{repr(self._pieces[0][6:9])}" +\
@@ -21,10 +21,25 @@ class Cube:
             return NotImplemented
         return self._pieces == other._pieces
 
+    def get_state(self):
+        state = []
+        for face in self._pieces:
+            for piece in face:
+                state.extend(piece.get_colors())
+        return state
+
+    def is_solved(self):
+        face_size = 6
+        for face in self._pieces:
+            colors = [piece.get_colors()[0] for piece in face]
+            if len(set(colors)) != 1:
+                return False
+        return True
+
     def make_solved_cube(self):
-        corners = []
-        sides = []
-        centers = []
+        corners: list[Piece] = []
+        sides: list[Piece] = []
+        centers: list[Piece] = []
 
         for i,j,k in product(FRONT_COLORS,TOP_COLORS, SIDE_COLORS):
             corners.append(Piece([i,j,k]))

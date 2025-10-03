@@ -4,7 +4,7 @@ import pygame
 import OpenGL.GL as gl
 import OpenGL.GLU as glu
 from cubePieces import Piece
-import cube
+from cube import Cube
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
@@ -18,145 +18,149 @@ color_map = {
     'X': (0.2, 0.2, 0.2)
 }
 
-def draw_piece(piece: Piece, size=1):
-    s = size
-    vertices = (
-        (s, s, s), (s, -s, s), (-s, -s, s), (-s, s, s),
-        (s, s, -s), (s, -s, -s), (-s, -s, -s), (-s, s, -s)
-    )
-    faces = (
-        (0, 1, 2, 3),
-        (4, 5, 6, 7),
-        (0, 1, 5, 4),
-        (2, 3, 7, 6),
-        (0, 3, 7, 4),
-        (1, 2, 6, 5)
-    )
-    face_colors = {
-        0: color_map[piece.colors['F']],
-        1: color_map[piece.colors['B']],
-        2: color_map[piece.colors['R']],
-        3: color_map[piece.colors['L']],
-        4: color_map[piece.colors['T']],
-        5: color_map[piece.colors['D']],
-    }
-    gl.glBegin(gl.GL_QUADS)
-    for i, f in enumerate(faces):
-        gl.glColor3fv(face_colors[i])
-        for v in f:
-            gl.glVertex3fv(vertices[v])
-    gl.glEnd()
-    gl.glColor3fv((0, 0, 0))
-    gl.glLineWidth(5)
-    gl.glBegin(gl.GL_LINES)
-    for f in faces:
-        for i in range(4):
-            gl.glVertex3fv(vertices[f[i]])
-            gl.glVertex3fv(vertices[f[(i + 1) % 4]])
-    gl.glEnd()
+class CubeRenderer:
+    def __init__(self, cube_instance: list[Cube], display=(1920, 1080), window_pos=(1920, 0)):
+        self.cube_instance = cube_instance
+        self.display = display
+        self.rot_x = 0
+        self.rot_y = 0
+        self.mouse_down = False
+        self.shift_down = False
+        self.last_mouse_pos = (0, 0)
 
-cube_instance = [cube.Cube()]
+        os.environ["SDL_VIDEO_WINDOW_POS"] = f"{window_pos[0]},{window_pos[1]}"
+        pygame.init()
+        pygame.display.set_mode(display, pygame.DOUBLEBUF | pygame.OPENGL | pygame.NOFRAME)
+        gl.glEnable(gl.GL_DEPTH_TEST)
 
-class ReloadHandler(FileSystemEventHandler):
-    def on_modified(self, event):
-        if event.src_path.startswith(".\cube") and not event.src_path.endswith("Render.py"):
-            while True:
-                try:
-                    importlib.reload(cube)
-                    cube_instance[0] = cube.Cube()
-                    break
-                except Exception as e:
-                    print(f"Reload error: {e}")
+        self._setup_hot_reload()
 
-observer = Observer()
-observer.schedule(ReloadHandler(), path='.', recursive=False)
-observer.start()
+    def _setup_hot_reload(self):
+        class ReloadHandler(FileSystemEventHandler):
+            def __init__(self, renderer):
+                self.renderer = renderer
 
-pygame.init()
-display = (1920, 1080)
-os.environ["SDL_VIDEO_WINDOW_POS"] = "1920,0"
-pygame.display.set_mode(display, pygame.DOUBLEBUF | pygame.OPENGL | pygame.NOFRAME)
-gl.glEnable(gl.GL_DEPTH_TEST)
+            def on_modified(self, event):
+                if event.src_path.startswith(".\\cube") and not event.src_path.endswith("Render.py"):
+                    while True:
+                        try:
+                            import cube
+                            self.renderer.cube_instance[0] = cube.Cube()
+                            break
+                        except Exception as e:
+                            print(f"Reload error: {e}")
 
-rot_x, rot_y = 0, 0
-mouse_down = False
-shift_down = False
-last_mouse_pos = (0, 0)
+        self.observer = Observer()
+        self.observer.schedule(ReloadHandler(self), path='.', recursive=False)
+        self.observer.start()
 
-try:
-    while True:
+    def draw_piece(self, piece: Piece, size=1):
+        s = size
+        vertices = (
+            (s, s, s), (s, -s, s), (-s, -s, s), (-s, s, s),
+            (s, s, -s), (s, -s, -s), (-s, -s, -s), (-s, s, -s)
+        )
+        faces = (
+            (0, 1, 2, 3), (4, 5, 6, 7),
+            (0, 1, 5, 4), (2, 3, 7, 6),
+            (0, 3, 7, 4), (1, 2, 6, 5)
+        )
+        face_colors = {
+            0: color_map[piece.colors['F']],
+            1: color_map[piece.colors['B']],
+            2: color_map[piece.colors['R']],
+            3: color_map[piece.colors['L']],
+            4: color_map[piece.colors['T']],
+            5: color_map[piece.colors['D']],
+        }
+        gl.glBegin(gl.GL_QUADS)
+        for i, f in enumerate(faces):
+            gl.glColor3fv(face_colors[i])
+            for v in f:
+                gl.glVertex3fv(vertices[v])
+        gl.glEnd()
+
+        gl.glColor3fv((0, 0, 0))
+        gl.glLineWidth(5)
+        gl.glBegin(gl.GL_LINES)
+        for f in faces:
+            for i in range(4):
+                gl.glVertex3fv(vertices[f[i]])
+                gl.glVertex3fv(vertices[f[(i + 1) % 4]])
+        gl.glEnd()
+
+    def handle_input(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 raise KeyboardInterrupt
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
-                mouse_down = True
-                last_mouse_pos = event.pos
+                self.mouse_down = True
+                self.last_mouse_pos = event.pos
             elif event.type == pygame.MOUSEBUTTONUP and event.button == 3:
-                mouse_down = False
-            elif event.type == pygame.MOUSEMOTION and mouse_down:
-                dx = event.pos[0] - last_mouse_pos[0]
-                dy = event.pos[1] - last_mouse_pos[1]
-                rot_x += dy
-                rot_y += dx
-                last_mouse_pos = event.pos
+                self.mouse_down = False
+            elif event.type == pygame.MOUSEMOTION and self.mouse_down:
+                dx = event.pos[0] - self.last_mouse_pos[0]
+                dy = event.pos[1] - self.last_mouse_pos[1]
+                self.rot_x += dy
+                self.rot_y += dx
+                self.last_mouse_pos = event.pos
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
-                    shift_down = True
-                if event.key == pygame.K_w:
-                    if shift_down:
-                        cube_instance[0].Ud()
-                    else:
-                        cube_instance[0].U()
-                elif event.key == pygame.K_s:
-                    if shift_down:
-                        cube_instance[0].Dd()
-                    else:
-                        cube_instance[0].D()
-                elif event.key == pygame.K_a:
-                    if shift_down:
-                        cube_instance[0].Ld()
-                    else:
-                        cube_instance[0].L()
-                elif event.key == pygame.K_d:
-                    if shift_down:
-                        cube_instance[0].Rd()
-                    else:
-                        cube_instance[0].R()
-                elif event.key == pygame.K_e:
-                    if shift_down:
-                        cube_instance[0].Fd()
-                    else:
-                        cube_instance[0].F()
-                elif event.key == pygame.K_q:
-                    if shift_down:
-                        cube_instance[0].Bd()
-                    else:
-                        cube_instance[0].B()
-            elif event.type == pygame.K_ESCAPE:
-                cube_instance[0].scramble()
-            elif event.type == pygame.K_KP_ENTER:
-                cube_instance[0].make_solved_cube()
+                if event.key in (pygame.K_LSHIFT, pygame.K_RSHIFT):
+                    self.shift_down = True
+                self._handle_cube_keys(event.key)
             elif event.type == pygame.KEYUP:
-                if event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
-                    shift_down = False
+                if event.key in (pygame.K_LSHIFT, pygame.K_RSHIFT):
+                    self.shift_down = False
 
+    def _handle_cube_keys(self, key):
+        cube_moves = {
+            pygame.K_w: (self.cube_instance[0].U, self.cube_instance[0].Ud),
+            pygame.K_s: (self.cube_instance[0].D, self.cube_instance[0].Dd),
+            pygame.K_a: (self.cube_instance[0].L, self.cube_instance[0].Ld),
+            pygame.K_d: (self.cube_instance[0].R, self.cube_instance[0].Rd),
+            pygame.K_e: (self.cube_instance[0].F, self.cube_instance[0].Fd),
+            pygame.K_q: (self.cube_instance[0].B, self.cube_instance[0].Bd)
+        }
+        if key in cube_moves:
+            move = cube_moves[key][1] if self.shift_down else cube_moves[key][0]
+            move()
+        elif key == pygame.K_ESCAPE:
+            self.cube_instance[0].scramble()
+        elif key == pygame.K_KP_ENTER:
+            self.cube_instance[0].make_solved_cube()
+
+    def render(self):
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
         gl.glLoadIdentity()
-        glu.gluPerspective(45, (display[0] / display[1]), 1, 150.0)
+        glu.gluPerspective(45, (self.display[0] / self.display[1]), 1, 150.0)
         gl.glTranslatef(-2, 3, -15)
-        gl.glRotatef(rot_x, 1, 0, 0)
-        gl.glRotatef(rot_y, 0, 1, 0)
+        gl.glRotatef(35.264,1,0,0)
+        gl.glRotatef(45,0,1,0)
+        gl.glRotatef(self.rot_x, 1, 0, 0)
+        gl.glRotatef(self.rot_y, 0, 1, 0)
 
-        current_cube = cube_instance[0]
-        pieces = current_cube._pieces[0] + current_cube._pieces[1] + current_cube._pieces[2]
+        current_cube = self.cube_instance[0]
+        pieces = sum(current_cube._pieces, [])
         for i, piece in enumerate(pieces):
             gl.glPushMatrix()
             gl.glTranslatef((i % 3) * 2, -(i // 3 - 3 * (i // 9)) * 2, -(i // 9) * 2)
-            draw_piece(piece)
+            self.draw_piece(piece)
             gl.glPopMatrix()
 
         pygame.display.flip()
         pygame.time.wait(2)
-except KeyboardInterrupt:
-    observer.stop()
-observer.join()
+
+    def run(self):
+        try:
+            print("Running...")
+            while True:
+                self.handle_input()
+                self.render()
+        except KeyboardInterrupt:
+            self.observer.stop()
+        self.observer.join()
+
+if __name__ == "__main__":
+    cube_instance = [Cube()]
+    renderer = CubeRenderer(cube_instance)
+    renderer.run()

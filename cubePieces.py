@@ -2,6 +2,14 @@ from functools import total_ordering
 from Constants import colors
 
 FRONT_COLORS, TOP_COLORS, SIDE_COLORS = colors
+color_onehotencoding = {
+    'W': 0,
+    'Y': 1,
+    'R': 2,
+    'O': 3,
+    'G': 4,
+    'B': 5
+}
 
 def compare_colors(color1: str, color2: str, index: int) -> bool:
     colors_list = colors[index]
@@ -62,7 +70,11 @@ class Piece:
                 if compare_colors(self.colors['T'], other.colors['T'], 0):
                     return True
         return False
-    
+
+    def get_colors(self):
+        output = [color_onehotencoding[color] for color in self.colors.values() if color != 'X']
+        return output
+
     def x_rotation(self):
         self.colors['F'], self.colors['B'], self.colors['R'], self.colors['L'] = \
         self.colors['L'], self.colors['R'], self.colors['F'], self.colors['B']
